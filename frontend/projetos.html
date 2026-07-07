@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Projetos — Nebula Deploy</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      .field { display:block; margin:8px 0 }
+      label { display:block; font-weight:600; margin-bottom:4px }
+      input, textarea { width: 100%; padding:8px; box-sizing:border-box }
+      .actions { margin-top:8px }
+      table { width:100%; border-collapse:collapse; margin-top:16px }
+      th, td { padding:8px; border-bottom:1px solid #eee; text-align:left }
+    </style>
+  </head>
+  <body>
+    <a href="dashboard.html">Back to Dashboard</a>
+    <h1>Projetos</h1>
+
+    <div id="form">
+      <div class="field"><label>Nome</label><input id="name" /></div>
+      <div class="field"><label>Repositório (URL)</label><input id="repo" /></div>
+      <div class="field"><label>Branch</label><input id="branch" placeholder="main" /></div>
+      <div class="field"><label>Porta</label><input id="port" placeholder="3000" /></div>
+      <div class="field"><label>Build Command</label><input id="build" placeholder="docker build ." /></div>
+      <div class="field"><label>Run Command</label><input id="run" placeholder="docker run" /></div>
+      <div class="field"><label>Variáveis de ambiente (uma por linha KEY=val)</label><textarea id="env" rows="4"></textarea></div>
+      <div class="actions"><button id="save">Salvar</button> <button id="cancel">Cancelar</button></div>
+    </div>
+
+    <h2>Projetos criados</h2>
+    <table id="list">
+      <thead><tr><th>Nome</th><th>Repo</th><th>Branch</th><th>Port</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      const API='http://localhost:3000';
+      function getToken(){ return localStorage.getItem('accessToken'); }
+      if (!getToken()) window.location.href='login.html';
+
+      function parseEnv(text){ const out={}; text.split('\n').map(l=>l.trim()).filter(Boolean).forEach(line=>{ const i=line.indexOf('='); if (i>0) out[line.slice(0,i).trim()]=line.slice(i+1).trim(); }); return out; }
+      function envToText(obj){ return Object.entries(obj||{}).map(([k,v])=>k+'='+v).join('\n'); }
+
+      async function load(){
+        const r=await fetch(API+'/projects',{ headers:{ Authorization:'Bearer '+getToken() }});
+        const j=await r.json();
+        // fetch latest deploys to show status per project
+        const depRes = await fetch(API+'/deploys/latest',{ headers:{ Authorization:'Bearer '+getToken() }});
+        const depJson = depRes.status === 200 ? await depRes.json() : { deploys: [] };
+        const latestMap = {};
+        (depJson.deploys||[]).forEach(d=>{ if (d.projectId) latestMap[d.projectId] = latestMap[d.projectId] || d; });
+
+        const tbody=document.querySelector('#list tbody');
+        tbody.innerHTML='';
+        (j.projects||[]).forEach(p=>{
+          const last = latestMap[p.id];
+          const statusText = last ? `${last.status}` : '-';
+          const tr=document.createElement('tr');
+          tr.innerHTML = `<td>${p.name}</td><td>${p.repo}</td><td>${p.branch}</td><td>${p.port}</td><td>${statusText}</td><td><button data-id='${p.id}' class='edit'>Editar</button> <button data-id='${p.id}' class='del'>Excluir</button> <button data-id='${p.id}' class='deploy'>Deploy</button></td>`;
+          tbody.appendChild(tr);
+        });
+        attachActions();
+      }
+
+      function attachActions(){
+        document.querySelectorAll('#list .del').forEach(b=>b.addEventListener('click', async (e)=>{ const id=e.target.dataset.id; await fetch(API+`/projects/${id}`,{ method:'DELETE', headers:{ Authorization:'Bearer '+getToken() }}); load(); }));
+        document.querySelectorAll('#list .edit').forEach(b=>b.addEventListener('click', async (e)=>{ const id=e.target.dataset.id; const res=await fetch(API+'/projects',{ headers:{ Authorization:'Bearer '+getToken() }}); const p=(await res.json()).projects.find(x=>x.id===id); if (!p) return; document.getElementById('name').value=p.name; document.getElementById('repo').value=p.repo; document.getElementById('branch').value=p.branch; document.getElementById('port').value=p.port; document.getElementById('build').value=p.buildCommand; document.getElementById('run').value=p.runCommand; document.getElementById('env').value=envToText(p.env); document.getElementById('save').dataset.editId = id; }));
+        document.querySelectorAll('#list .deploy').forEach(b=>b.addEventListener('click', async (e)=>{ const id=e.target.dataset.id; const r=await fetch(API+`/projects/${id}/deploy`, { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+getToken() } }); const j=await r.json(); alert(j.message || JSON.stringify(j)); }));
+      }
+
+      document.getElementById('save').addEventListener('click', async ()=>{
+        const id=document.getElementById('save').dataset.editId;
+        const body={ name:document.getElementById('name').value, repo:document.getElementById('repo').value, branch:document.getElementById('branch').value||'main', port:document.getElementById('port').value||3000, buildCommand:document.getElementById('build').value||'docker build .', runCommand:document.getElementById('run').value||'docker run', env: parseEnv(document.getElementById('env').value) };
+        if (id){ await fetch(API+`/projects/${id}`,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+getToken() }, body: JSON.stringify(body)}); delete document.getElementById('save').dataset.editId; }
+        else { await fetch(API+'/projects',{ method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+getToken() }, body: JSON.stringify(body)}); }
+        document.getElementById('name').value=''; document.getElementById('repo').value=''; document.getElementById('branch').value=''; document.getElementById('port').value=''; document.getElementById('build').value=''; document.getElementById('run').value=''; document.getElementById('env').value='';
+        load();
+      });
+
+      document.getElementById('cancel').addEventListener('click', ()=>{ delete document.getElementById('save').dataset.editId; document.getElementById('name').value=''; document.getElementById('repo').value=''; document.getElementById('branch').value=''; document.getElementById('port').value=''; document.getElementById('build').value=''; document.getElementById('run').value=''; document.getElementById('env').value=''; });
+
+      load();
+    </script>
+  </body>
+</html>

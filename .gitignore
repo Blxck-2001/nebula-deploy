@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+*.log
+# Maven / Java build artifacts
+**/target/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local test data / tokens
+token.txt
+publish.json
+auth-register.json
+backend/data.json

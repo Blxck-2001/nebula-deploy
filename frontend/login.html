@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nebula Deploy - Login</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px} .box{max-width:420px}</style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>Login</h1>
+      <div>
+        <input id="username" placeholder="username" />
+      </div>
+      <div>
+        <input id="password" type="password" placeholder="password" />
+      </div>
+      <div style="margin-top:8px">
+        <button id="btnLogin">Login</button>
+        <span id="loginMsg"></span>
+      </div>
+      <p>Don't have an account? Open a terminal and POST to <code>/auth/register</code>.</p>
+    </div>
+
+    <script>
+      const API='http://localhost:3000';
+      function setToken(t){ localStorage.setItem('accessToken', t); }
+      function setRefresh(t){ localStorage.setItem('refreshToken', t); }
+      document.getElementById('btnLogin').addEventListener('click', async ()=>{
+        const u=document.getElementById('username').value;
+        const p=document.getElementById('password').value;
+        const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+        const j=await r.json();
+        if (j.accessToken){ setToken(j.accessToken); if (j.refreshToken) setRefresh(j.refreshToken); window.location.href='dashboard.html'; }
+        else document.getElementById('loginMsg').textContent = JSON.stringify(j);
+      });
+    </script>
+  </body>
+</html>

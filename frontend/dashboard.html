@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nebula Deploy - Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; max-width:1100px; margin:0 auto }
+      .header { display:flex; align-items:center; justify-content:space-between; gap:12px }
+      .header-left { display:flex; align-items:center; gap:12px }
+      .header-right { display:flex; align-items:center; gap:8px }
+      .cards { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px }
+      .card { border: 1px solid #ddd; padding: 12px; width:220px; box-sizing:border-box }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 6px; border-bottom: 1px solid #eee }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-left">
+        <a href="login.html">Back to Login</a>
+        <h1>Nebula Deploy — Dashboard</h1>
+      </div>
+      <div class="header-right">
+        <a href="projetos.html"><button id="btnCreateProjectTop">Criar Projeto</button></a>
+        <button id="btnLogout">Logout</button>
+      </div>
+    </div>
+
+    <div id="stats" class="cards">
+      <div class="card"><strong>Projects</strong><div id="projects">—</div></div>
+      <div class="card"><strong>Active Containers</strong><div id="containers">—</div></div>
+      <div class="card"><strong>CPU %</strong><div id="cpu">—</div></div>
+      <div class="card"><strong>Memory MB</strong><div id="memory">—</div></div>
+    </div>
+
+    <h2>Últimos Deploys</h2>
+    <table id="deploysTable">
+      <thead><tr><th>Repo</th><th>Tag</th><th>User</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+
+    <script>
+      const API = 'http://localhost:3000';
+      function getToken(){ return localStorage.getItem('accessToken'); }
+      function clearToken(){ localStorage.removeItem('accessToken'); localStorage.removeItem('refreshToken'); }
+      if (!getToken()){ window.location.href = 'login.html'; }
+
+      async function fetchDashboard(){
+        const token = getToken();
+        if (!token) { window.location.href='login.html'; return; }
+        const r = await fetch(API+'/dashboard', { headers: { Authorization: 'Bearer '+token } });
+        if (r.status===401 || r.status===403) { window.location.href='login.html'; return; }
+        const j = await r.json();
+        document.getElementById('projects').textContent = j.projects;
+        document.getElementById('containers').textContent = j.activeContainers;
+        document.getElementById('cpu').textContent = j.cpuPercent + '%';
+        document.getElementById('memory').textContent = j.memoryMb + ' MB';
+        const tbody = document.querySelector('#deploysTable tbody'); tbody.innerHTML='';
+        (j.latestDeploys||[]).forEach(d=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${d.repo}</td><td>${d.tag}</td><td>${d.user}</td><td>${d.status}</td><td>${new Date(d.createdAt).toLocaleString()}</td>`; tbody.appendChild(tr); });
+      }
+
+      document.getElementById('btnLogout').addEventListener('click', ()=>{ clearToken(); window.location.href='login.html'; });
+
+      fetchDashboard(); setInterval(()=>{ fetchDashboard(); },5000);
+    </script>
+  </body>
+</html>

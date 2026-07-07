@@ -1,0 +1,46 @@
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+  worker:
+    build: ./worker
+    restart: on-failure
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: nebula
+      POSTGRES_USER: nebula
+      POSTGRES_PASSWORD: nebula
+    ports:
+      - "5432:5432"
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+  backend-spring:
+    build: ./backend-spring
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+  backend-worker:
+    build: ./backend-worker
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+      - postgres
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
