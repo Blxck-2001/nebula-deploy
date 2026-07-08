@@ -16,7 +16,7 @@ Meu papel e decisões chave
 - Priorizei testabilidade: extraí interação com o sistema (`CommandRunner`) para permitir testes unitários/integração sem Docker.  
 - Corrigi problemas práticos encontrados em execução (migração de esquema para `deploy_logs`, tratamento de ausência de `git`, ajustes no CI).  
 
-Arquitetura (alto nível)
+Arquitetura
 -----------------------
 - API (Spring Boot) — autenticação JWT, endpoints para criar projetos e publicar `DeployMessage` em RabbitMQ.  
 - Worker (Java) — consumidor RabbitMQ; clona repositórios, executa `buildCommand`/`runCommand`, stream de logs para Postgres, retries + DLQ.  
