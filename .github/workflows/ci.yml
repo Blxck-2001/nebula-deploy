@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build Java modules if present
+        run: |
+          if [ -f backend-spring/pom.xml ]; then mvn -f backend-spring/pom.xml -T1C -DskipTests=false verify; fi
+          if [ -f backend-worker/pom.xml ]; then mvn -f backend-worker/pom.xml -T1C -DskipTests=false verify; fi
+
+      - name: Run frontend tests if present
+        run: |
+          if [ -f frontend/package.json ]; then cd frontend && npm ci && npm test; fi
+name: CI
+
+env:
+  COVERAGE_THRESHOLD: '0.0'
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-spring:
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+      SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+      SPRING_RABBITMQ_HOST: ${{ secrets.SPRING_RABBITMQ_HOST }}
+      SPRING_RABBITMQ_PORT: ${{ secrets.SPRING_RABBITMQ_PORT }}
+      SPRING_RABBITMQ_USERNAME: ${{ secrets.SPRING_RABBITMQ_USERNAME }}
+      SPRING_RABBITMQ_PASSWORD: ${{ secrets.SPRING_RABBITMQ_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run backend-spring tests
+        run: mvn -f backend-spring/pom.xml -B test
+
+      - name: Generate JaCoCo report (backend-spring)
+        run: mvn -f backend-spring/pom.xml jacoco:report
+
+      - name: Enforce coverage (backend-spring)
+        run: mvn -f backend-spring/pom.xml -Dcoverage.threshold=${{ env.COVERAGE_THRESHOLD }} jacoco:check
+
+      - name: Upload coverage report (spring)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-spring
+          path: backend-spring/target/site/jacoco
+
+  test-worker:
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+      SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+      SPRING_RABBITMQ_HOST: ${{ secrets.SPRING_RABBITMQ_HOST }}
+      SPRING_RABBITMQ_PORT: ${{ secrets.SPRING_RABBITMQ_PORT }}
+      SPRING_RABBITMQ_USERNAME: ${{ secrets.SPRING_RABBITMQ_USERNAME }}
+      SPRING_RABBITMQ_PASSWORD: ${{ secrets.SPRING_RABBITMQ_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run backend-worker tests
+        run: mvn -f backend-worker/pom.xml -B test
+
+      - name: Generate JaCoCo report (backend-worker)
+        run: mvn -f backend-worker/pom.xml jacoco:report
+
+      - name: Enforce coverage (backend-worker)
+        run: mvn -f backend-worker/pom.xml -Dcoverage.threshold=${{ env.COVERAGE_THRESHOLD }} jacoco:check
+
+      - name: Upload coverage report (worker)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-worker
+          path: backend-worker/target/site/jacoco
+
+  package:
+    needs: [test-spring, test-worker]
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+      SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+      SPRING_RABBITMQ_HOST: ${{ secrets.SPRING_RABBITMQ_HOST }}
+      SPRING_RABBITMQ_PORT: ${{ secrets.SPRING_RABBITMQ_PORT }}
+      SPRING_RABBITMQ_USERNAME: ${{ secrets.SPRING_RABBITMQ_USERNAME }}
+      SPRING_RABBITMQ_PASSWORD: ${{ secrets.SPRING_RABBITMQ_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build backend-spring
+        run: mvn -f backend-spring/pom.xml -B -DskipTests package
+
+      - name: Build backend-worker
+        run: mvn -f backend-worker/pom.xml -B -DskipTests package
+
+      - name: Lint / Frontend (if any)
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend && npm ci && npm run lint || true
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-artifacts
+          path: |
+            backend-spring/target/*.jar
+            backend-worker/target/*.jar

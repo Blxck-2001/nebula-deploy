@@ -44,3 +44,9 @@ services:
       - postgres
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    # Resource limits are advisory here; for production use set limits in orchestration (Kubernetes)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M

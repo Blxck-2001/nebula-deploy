@@ -17,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.util.Collections;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 public class SecurityConfig {
@@ -37,8 +38,9 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 
     @Bean
-    public JwtUtil jwtUtil() {
-        return new JwtUtil("change-me-secret", 1000L * 60 * 60);
+    public JwtUtil jwtUtil(@Value("${JWT_SECRET:change-me-secret}") String jwtSecret,
+                           @Value("${JWT_EXPIRATION_MS:3600000}") long expirationMs) {
+        return new JwtUtil(jwtSecret, expirationMs);
     }
 
     @Bean

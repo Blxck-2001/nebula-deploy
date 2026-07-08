@@ -11,6 +11,7 @@ public class DeployMessage {
     private String buildCommand;
     private String runCommand;
     private Map<String,String> env;
+    private Integer retryCount;
 
     public UUID getDeployId() { return deployId; }
     public void setDeployId(UUID deployId) { this.deployId = deployId; }
@@ -26,4 +27,6 @@ public class DeployMessage {
     public void setRunCommand(String runCommand) { this.runCommand = runCommand; }
     public Map<String, String> getEnv() { return env; }
     public void setEnv(Map<String, String> env) { this.env = env; }
+    public Integer getRetryCount() { return retryCount == null ? 0 : retryCount; }
+    public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
 }

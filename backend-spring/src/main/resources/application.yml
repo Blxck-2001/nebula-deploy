@@ -1,20 +1,25 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/nebula
-    username: nebula
-    password: nebula
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/nebula}
+    username: ${SPRING_DATASOURCE_USERNAME:nebula}
+    password: ${SPRING_DATASOURCE_PASSWORD:nebula}
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
 
   rabbitmq:
-    host: rabbitmq
-    port: 5672
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
 
 redis:
-  host: redis
-  port: 6379
+  host: ${REDIS_HOST:redis}
+  port: ${REDIS_PORT:6379}
+
+# JWT can be provided via env var `JWT_SECRET`. Default is insecure and only for local development.
+jwt:
+  secret: ${JWT_SECRET:change-me-secret}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}

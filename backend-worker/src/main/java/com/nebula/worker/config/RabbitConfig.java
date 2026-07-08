@@ -21,6 +21,9 @@ public class RabbitConfig {
     public TopicExchange deployExchange() { return new TopicExchange(DEPLOY_EXCHANGE); }
 
     @Bean
+    public Queue deployDlqQueue() { return new Queue(DEPLOY_QUEUE + "-dlq", true); }
+
+    @Bean
     public Jackson2JsonMessageConverter jackson2Converter() { return new Jackson2JsonMessageConverter(); }
 
     @Bean
@@ -29,5 +32,12 @@ public class RabbitConfig {
         f.setConnectionFactory(cf);
         f.setMessageConverter(jackson2Converter());
         return f;
+    }
+
+    @Bean
+    public org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate(ConnectionFactory cf) {
+        org.springframework.amqp.rabbit.core.RabbitTemplate t = new org.springframework.amqp.rabbit.core.RabbitTemplate(cf);
+        t.setMessageConverter(jackson2Converter());
+        return t;
     }
 }
