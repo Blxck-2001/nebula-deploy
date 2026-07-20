@@ -44,8 +44,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtFilter jwtFilter(UserDetailsService uds) {
-        return new JwtFilter(jwtUtil(), uds);
+    public JwtFilter jwtFilter(JwtUtil jwtUtil, UserDetailsService uds) {
+        return new JwtFilter(jwtUtil, uds);
     }
 
     @Bean
