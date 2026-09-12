@@ -6,10 +6,10 @@ React -> Spring Boot API -> RabbitMQ -> Worker -> Docker Engine -> Containers
 ```mermaid
 graph LR
   React[React Frontend]
-  API[Spring Boot API<br/> (port 8080)]
-  Rabbit[RabbitMQ<br/> (5672 / 15672)]
-  Worker[Worker Service<br/> (consumer)]
-  DockerEngine[Docker Engine<br/> (/var/run/docker.sock)]
+  API["Spring Boot API (port 8080)"]
+  Rabbit["RabbitMQ (5672 / 15672)"]
+  Worker["Worker Service (consumer)"]
+  DockerEngine["Docker Engine (/var/run/docker.sock)"]
   Containers[Application Containers]
 
   React --> API

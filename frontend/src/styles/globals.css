@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-nebula-950 text-white antialiased;
+  }
+
+  ::selection {
+    @apply bg-violet-500/30 text-white;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-hero-gradient bg-clip-text text-transparent;
+  }
+
+  .glass {
+    @apply border border-white/10 bg-white/[0.03] backdrop-blur-sm;
+  }
+
+  .glass-card {
+    @apply rounded-xl border border-white/10 bg-zinc-900/50 backdrop-blur-sm;
+  }
+}

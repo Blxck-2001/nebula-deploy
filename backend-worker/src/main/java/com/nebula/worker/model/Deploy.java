@@ -25,6 +25,7 @@ public class Deploy {
     private Instant createdAt;
     private Instant startedAt;
     private Instant finishedAt;
+    private Integer retryCount;
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -40,4 +41,6 @@ public class Deploy {
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public Instant getFinishedAt() { return finishedAt; }
     public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
+    public Integer getRetryCount() { return retryCount; }
+    public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
 }

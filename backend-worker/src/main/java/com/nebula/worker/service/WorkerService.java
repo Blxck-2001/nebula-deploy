@@ -1,7 +1,10 @@
 package com.nebula.worker.service;
 
 import com.nebula.worker.config.RabbitConfig;
+import com.nebula.worker.dto.DeploymentQueuedMessage;
 import com.nebula.worker.dto.DeployMessage;
+import com.nebula.worker.model.Project;
+import com.nebula.worker.repo.ProjectRepository;
 import com.nebula.worker.model.Deploy;
 import com.nebula.worker.repo.DeployRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -32,11 +35,14 @@ import org.springframework.beans.factory.annotation.Value;
 @Service
 public class WorkerService {
     private final DeployRepository deployRepository;
+    private final ProjectRepository projectRepository;
     private final RabbitTemplate rabbitTemplate;
     private static final int MAX_RETRIES = 3;
     private final ThreadLocal<List<String>> activeSecrets = ThreadLocal.withInitial(ArrayList::new);
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final CommandRunner commandRunner;
+    private final GitService gitService;
+    private final DockerService dockerService;
 
     @Value("${worker.process-timeout-seconds:300}")
     private long processTimeoutSeconds;
@@ -53,22 +59,38 @@ public class WorkerService {
     @Value("${worker.retry.multiplier:2.0}")
     private double retryMultiplier;
 
-    public WorkerService(DeployRepository deployRepository, RabbitTemplate rabbitTemplate, CommandRunner commandRunner) {
+    public WorkerService(DeployRepository deployRepository, ProjectRepository projectRepository, RabbitTemplate rabbitTemplate, CommandRunner commandRunner, GitService gitService, DockerService dockerService) {
         this.deployRepository = deployRepository;
+        this.projectRepository = projectRepository;
         this.rabbitTemplate = rabbitTemplate;
         this.commandRunner = commandRunner;
+        this.gitService = gitService;
+        this.dockerService = dockerService;
     }
 
     @RabbitListener(queues = RabbitConfig.DEPLOY_QUEUE)
-    public void handle(DeployMessage msg) {
-        System.out.println("Received deploy: " + msg.getDeployId());
-        var opt = deployRepository.findById(msg.getDeployId());
+    public void handle(DeploymentQueuedMessage msg) {
+        // accept either `deploymentId` or `deployId` from producers
+        java.util.UUID incomingId = msg.getDeploymentId() != null ? msg.getDeploymentId() : msg.getDeployId();
+        System.out.println("Received deployment queued: " + incomingId);
+        var opt = deployRepository.findById(incomingId);
         if (opt.isEmpty()) {
-            System.out.println("Deploy not found: " + msg.getDeployId());
+            System.out.println("Deploy not found: " + msg.getDeploymentId());
             return;
         }
         Deploy d = opt.get();
-        d.setStatus("processing");
+
+        var popt = projectRepository.findById(msg.getProjectId());
+        if (popt.isEmpty()) {
+            appendLog(d, "Project not found: " + msg.getProjectId());
+            d.setStatus("FAILED");
+            d.setFinishedAt(Instant.now());
+            deployRepository.save(d);
+            return;
+        }
+        Project project = popt.get();
+
+        d.setStatus("RUNNING");
         d.setStartedAt(Instant.now());
         d.setLogs(new ArrayList<>());
         deployRepository.save(d);
@@ -77,7 +99,7 @@ public class WorkerService {
         try {
             // prepare active secrets to be masked in logs for this deploy
             List<String> secrets = new ArrayList<>();
-            Map<String,String> env = msg.getEnv();
+            Map<String,String> env = project.getEnv();
             if (env != null) {
                 String token = env.get("GIT_TOKEN");
                 if (token != null && !token.isBlank()) {
@@ -90,105 +112,85 @@ public class WorkerService {
                 }
             }
             activeSecrets.set(secrets);
-            
+
             Files.createDirectories(baseDir);
-            Path work = Files.createTempDirectory(baseDir, "deploy-");
-            // prepare auth (token / ssh key) and clone with fallbacks
-            String repoUrl = applyAuthToRepo(msg);
-            Map<String,String> extraEnv = null;
-            Path sshKeyFile = null;
+            // prepare repo dir (persistent per project)
+            Path repoDir = gitService.prepareRepository(baseDir, project, null);
+
+            // build image
+            String imageTag = "nebula-" + project.getId().toString() + ":" + d.getId().toString();
+            String dockerfilePath = "Dockerfile"; // default
+            dockerService.buildImage(repoDir, imageTag, dockerfilePath, line -> appendLog(d, line));
+
+            // stop and remove previous container
+            String containerName = "nebula-" + project.getId().toString();
+            dockerService.stopAndRemoveContainer(containerName);
+
+            // run container
+            int port = project.getPort() == null ? 3000 : project.getPort();
+            dockerService.runContainer(containerName, imageTag, port, project.getEnv());
+
+            // verify
+            boolean running = dockerService.verifyContainerRunning(containerName);
+            if (!running) throw new RuntimeException("Container failed to start");
+
+            d.setStatus("SUCCESS");
+            d.setFinishedAt(Instant.now());
+            deployRepository.save(d);
+
+            // update project status and metadata
             try {
-                Map<String,String> env2 = msg.getEnv();
-                if (env2 != null) {
-                    String sshKey = env2.get("GIT_SSH_PRIVATE_KEY");
-                    if (sshKey != null && !sshKey.isBlank()) {
-                        // write private key to a file inside work dir
-                        sshKeyFile = Files.createTempFile(work, "id_rsa_", "");
-                        Files.writeString(sshKeyFile, sshKey);
-                        // try to set file permission to 600; ignore on unsupported FS
-                        try {
-                            Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rw-------");
-                            Files.setPosixFilePermissions(sshKeyFile, perms);
-                        } catch (UnsupportedOperationException ignored) {
-                        }
-                        String sshCmd = "ssh -i " + sshKeyFile.toAbsolutePath().toString() + " -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null";
-                        extraEnv = new HashMap<>();
-                        extraEnv.put("GIT_SSH_COMMAND", sshCmd);
-                    }
-                }
-
-                boolean cloned = false;
-                List<String> tryBranches = new ArrayList<>();
-                if (msg.getBranch() != null && !msg.getBranch().isBlank()) tryBranches.add(msg.getBranch());
-                tryBranches.add("master");
-                tryBranches.add("main");
-                tryBranches.add(null);
-                Exception lastEx = null;
-                for (String b : tryBranches) {
-                    try {
-                        if (b == null) {
-                            runCommandAndLog(d, List.of("git","clone","--depth","1",repoUrl,work.toString()), work, extraEnv);
-                        } else {
-                            runCommandAndLog(d, List.of("git","clone","--depth","1","--branch",b,repoUrl,work.toString()), work, extraEnv);
-                        }
-                        cloned = true;
-                        break;
-                    } catch (Exception ex) {
-                        lastEx = ex;
-                        appendLog(d, "Clone attempt failed for branch '" + b + "': " + ex.getMessage());
-                    }
-                }
-                if (!cloned) throw lastEx != null ? lastEx : new RuntimeException("Clone failed");
-                // run build command in work dir
-                runShellAndLog(d, msg.getBuildCommand(), work);
-                // run run command in work dir
-                runShellAndLog(d, msg.getRunCommand(), work);
-
-                d.setStatus("success");
-                d.setFinishedAt(Instant.now());
-                deployRepository.save(d);
-            } finally {
-                // cleanup ssh key file if created
-                if (sshKeyFile != null) {
-                    try { Files.deleteIfExists(sshKeyFile); } catch (Exception ignored) {}
-                }
+                project.setStatus("RUNNING");
+                project.setLastDeployedAt(Instant.now());
+                project.setLastImage(imageTag);
+                projectRepository.save(project);
+            } catch (Exception ex) {
+                appendLog(d, "Failed to update project metadata: " + ex.getMessage());
             }
         } catch (Exception e) {
             e.printStackTrace();
             appendLog(d, "Error: " + e.getMessage());
-            // retry logic with exponential backoff (scheduled)
-            int retries = msg.getRetryCount();
+
+            // handle retries
+            Integer retries = d.getRetryCount();
+            if (retries == null) retries = 0;
             if (retries < MAX_RETRIES) {
-                msg.setRetryCount(retries + 1);
-                appendLog(d, "Scheduling retry (" + msg.getRetryCount() + ")...");
+                int next = retries + 1;
+                d.setRetryCount(next);
+                appendLog(d, "Scheduling retry (" + next + ")...");
                 deployRepository.save(d);
-                long delay = retryInitialDelayMs;
-                for (int i = 1; i < msg.getRetryCount(); i++) {
-                    delay = Math.min(retryMaxDelayMs, (long)(delay * retryMultiplier));
-                }
+                long delay = computeRetryDelay(next, retryInitialDelayMs, retryMaxDelayMs, retryMultiplier);
+                DeploymentQueuedMessage retryMsg = new DeploymentQueuedMessage();
+                retryMsg.setDeploymentId(d.getId());
+                retryMsg.setProjectId(project.getId());
                 long finalDelay = delay;
                 scheduler.schedule(() -> {
                     try {
-                        rabbitTemplate.convertAndSend(RabbitConfig.DEPLOY_EXCHANGE, RabbitConfig.DEPLOY_ROUTING, msg);
+                        rabbitTemplate.convertAndSend(RabbitConfig.DEPLOY_EXCHANGE, RabbitConfig.DEPLOY_ROUTING, retryMsg);
                     } catch (Exception ex) {
                         appendLog(d, "Failed to republish message for retry: " + ex.getMessage());
                     }
                 }, finalDelay, TimeUnit.MILLISECONDS);
                 return;
             }
-            // send to DLQ
-            appendLog(d, "Max retries reached, sending to DLQ");
-            d.setStatus("failed");
+
+            // max retries reached
+            appendLog(d, "Max retries reached, marking failed and sending to DLQ");
+            d.setStatus("FAILED");
             d.setFinishedAt(Instant.now());
             deployRepository.save(d);
             try {
-                // send to queue named deploys-dlq via default exchange
-                rabbitTemplate.convertAndSend("", RabbitConfig.DEPLOY_QUEUE + "-dlq", msg);
+                project.setStatus("FAILED");
+                projectRepository.save(project);
+            } catch (Exception ex) {
+                appendLog(d, "Failed to update project status after failure: " + ex.getMessage());
+            }
+            try {
+                rabbitTemplate.convertAndSend("", RabbitConfig.DEPLOY_QUEUE + "-dlq", new DeploymentQueuedMessage() {{ setDeploymentId(d.getId()); setProjectId(project.getId()); }});
             } catch (Exception rex) {
                 appendLog(d, "Failed to publish to DLQ: " + rex.getMessage());
             }
         } finally {
-            // ensure we clear any secrets for this thread
             activeSecrets.remove();
         }
     }
@@ -257,9 +259,20 @@ public class WorkerService {
         try {
             // mask secrets before persisting
             String masked = maskSecrets(line);
+            // ensure saved log line fits DB column (varchar(255))
+            String prefix = Instant.now().toString() + " ";
+            int maxTotal = 255;
+            String suffix = "...[truncated]";
+            if (masked == null) masked = "";
+            int avail = maxTotal - prefix.length();
+            String finalMasked = masked;
+            if (finalMasked.length() > avail) {
+                int keep = Math.max(0, avail - suffix.length());
+                finalMasked = finalMasked.substring(0, keep) + suffix;
+            }
             List<String> logs = d.getLogs();
             if (logs == null) logs = new ArrayList<>();
-            logs.add(Instant.now().toString() + " " + masked);
+            logs.add(prefix + finalMasked);
             d.setLogs(logs);
             deployRepository.save(d);
         } catch (Exception e) {

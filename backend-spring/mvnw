@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec java -Dmaven.multiModuleProjectDirectory="$DIR" -cp "$DIR/.mvn/wrapper/maven-wrapper.jar" org.apache.maven.wrapper.MavenWrapperMain "$@"

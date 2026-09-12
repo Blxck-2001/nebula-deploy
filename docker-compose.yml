@@ -44,6 +44,8 @@ services:
       - postgres
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./worker-workdir:/tmp/worker
+    user: root
     # Resource limits are advisory here; for production use set limits in orchestration (Kubernetes)
     deploy:
       resources:

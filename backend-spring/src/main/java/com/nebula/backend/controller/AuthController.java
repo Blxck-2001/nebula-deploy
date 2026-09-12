@@ -24,25 +24,25 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String,String> body) {
-        String username = body.get("username");
+        String email = body.get("email");
         String password = body.get("password");
-        if (username == null || password == null) return ResponseEntity.badRequest().body(Map.of("error","username and password required"));
-        if (userRepository.findByUsername(username).isPresent()) return ResponseEntity.status(409).body(Map.of("error","user exists"));
-        User u = new User(); u.setUsername(username); u.setPassword(passwordEncoder.encode(password));
+        if (email == null || password == null) return ResponseEntity.badRequest().body(Map.of("error","email and password required"));
+        if (userRepository.findByEmail(email).isPresent()) return ResponseEntity.status(409).body(Map.of("error","user exists"));
+        User u = new User(); u.setEmail(email); u.setPassword(passwordEncoder.encode(password));
         userRepository.save(u);
         return ResponseEntity.ok(Map.of("message","user created"));
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String,String> body) {
-        String username = body.get("username");
+        String email = body.get("email");
         String password = body.get("password");
-        if (username == null || password == null) return ResponseEntity.badRequest().body(Map.of("error","username and password required"));
-        var opt = userRepository.findByUsername(username);
+        if (email == null || password == null) return ResponseEntity.badRequest().body(Map.of("error","email and password required"));
+        var opt = userRepository.findByEmail(email);
         if (opt.isEmpty()) return ResponseEntity.status(401).body(Map.of("error","invalid credentials"));
         User u = opt.get();
         if (!passwordEncoder.matches(password, u.getPassword())) return ResponseEntity.status(401).body(Map.of("error","invalid credentials"));
-        String token = jwtUtil.generateToken(u.getUsername());
+        String token = jwtUtil.generateToken(u.getEmail());
         return ResponseEntity.ok(Map.of("accessToken", token));
     }
 }

@@ -16,6 +16,7 @@ public class Deploy {
     private Project project;
 
     private String status; // queued, processing, success, failed
+    private String commit;
 
     @ElementCollection
     @CollectionTable(name = "deploy_logs")
@@ -32,6 +33,8 @@ public class Deploy {
     public void setProject(Project project) { this.project = project; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getCommit() { return commit; }
+    public void setCommit(String commit) { this.commit = commit; }
     public List<String> getLogs() { return logs; }
     public void setLogs(List<String> logs) { this.logs = logs; }
     public Instant getCreatedAt() { return createdAt; }

@@ -25,8 +25,8 @@ public class ProjectController {
     }
 
     private User currentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username).orElseThrow();
+        String principal = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(principal).orElseThrow();
     }
 
     @GetMapping
@@ -55,7 +55,7 @@ public class ProjectController {
         Optional<Project> opt = projectRepository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         Project p = opt.get();
-        if (!p.getUser().getUsername().equals(currentUser().getUsername())) return ResponseEntity.status(403).build();
+        if (!p.getUser().getEmail().equals(currentUser().getEmail())) return ResponseEntity.status(403).build();
         if (body.containsKey("name")) p.setName((String)body.get("name"));
         if (body.containsKey("repo")) p.setRepo((String)body.get("repo"));
         projectRepository.save(p);
@@ -67,7 +67,7 @@ public class ProjectController {
         Optional<Project> opt = projectRepository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         Project p = opt.get();
-        if (!p.getUser().getUsername().equals(currentUser().getUsername())) return ResponseEntity.status(403).build();
+        if (!p.getUser().getEmail().equals(currentUser().getEmail())) return ResponseEntity.status(403).build();
         projectRepository.delete(p);
         return ResponseEntity.ok(Map.of("message","deleted"));
     }

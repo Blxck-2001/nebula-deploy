@@ -23,14 +23,21 @@ public class DefaultCommandRunner implements CommandRunner {
         pb.redirectErrorStream(true);
         Process p = pb.start();
 
+        // keep the last N lines in memory for error reporting
+        final int MAX_LINES = 200;
+        java.util.Deque<String> tail = new java.util.ArrayDeque<>(MAX_LINES + 1);
+
         Thread reader = new Thread(() -> {
             try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                 String line;
                 while ((line = r.readLine()) != null) {
-                    outputLine.accept(line);
+                    // store tail
+                    if (tail.size() >= MAX_LINES) tail.removeFirst();
+                    tail.addLast(line);
+                    try { outputLine.accept(line); } catch (Exception ignored) {}
                 }
             } catch (IOException ioe) {
-                outputLine.accept("Error reading process output: " + ioe.getMessage());
+                try { outputLine.accept("Error reading process output: " + ioe.getMessage()); } catch (Exception ignored) {}
             }
         });
         reader.setDaemon(true);
@@ -42,7 +49,14 @@ public class DefaultCommandRunner implements CommandRunner {
             throw new RuntimeException("Command timed out after " + timeoutSeconds + " seconds");
         }
         int exit = p.exitValue();
-        outputLine.accept("Exit code: " + exit);
-        if (exit != 0) throw new RuntimeException("Command failed with exit " + exit);
+        try { outputLine.accept("Exit code: " + exit); } catch (Exception ignored) {}
+        if (exit != 0) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Command failed with exit ").append(exit).append(". Last output:\n");
+            for (String l : tail) {
+                sb.append(l).append('\n');
+            }
+            throw new RuntimeException(sb.toString());
+        }
     }
 }

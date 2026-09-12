@@ -10,6 +10,7 @@ public class DeployMessage {
     private String branch;
     private String buildCommand;
     private String runCommand;
+    private String commit;
     private Map<String,String> env;
 
     public UUID getDeployId() { return deployId; }
@@ -24,6 +25,8 @@ public class DeployMessage {
     public void setBuildCommand(String buildCommand) { this.buildCommand = buildCommand; }
     public String getRunCommand() { return runCommand; }
     public void setRunCommand(String runCommand) { this.runCommand = runCommand; }
+    public String getCommit() { return commit; }
+    public void setCommit(String commit) { this.commit = commit; }
     public Map<String, String> getEnv() { return env; }
     public void setEnv(Map<String, String> env) { this.env = env; }
 }

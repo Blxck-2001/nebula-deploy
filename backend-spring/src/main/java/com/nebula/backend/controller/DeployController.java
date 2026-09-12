@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 @RestController
 public class DeployController {
@@ -33,8 +34,8 @@ public class DeployController {
     }
 
     private User currentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username).orElseThrow();
+        String principal = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(principal).orElseThrow();
     }
 
     @PostMapping("/projects/{id}/deploy")
@@ -42,28 +43,31 @@ public class DeployController {
         Optional<Project> opt = projectRepository.findById(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         Project p = opt.get();
-        if (!p.getUser().getUsername().equals(currentUser().getUsername())) return ResponseEntity.status(403).build();
+        if (!p.getUser().getEmail().equals(currentUser().getEmail())) return ResponseEntity.status(403).build();
+
+        // Prevent concurrent deploys
+        var runningStatuses = List.of("PENDING","RUNNING","queued","processing");
+        if (deployRepository.existsByProjectIdAndStatusIn(p.getId(), runningStatuses)) {
+            return ResponseEntity.status(409).body(Map.of("error","a deploy is already running for this project"));
+        }
 
         Deploy d = new Deploy();
         d.setProject(p);
-        d.setStatus("queued");
+        if (body != null && body.containsKey("commit")) d.setCommit((String)body.get("commit"));
+        d.setStatus("PENDING");
         d.setCreatedAt(Instant.now());
         deployRepository.save(d);
 
-        DeployMessage msg = new DeployMessage();
-        msg.setDeployId(d.getId());
+        // publish minimal message; worker will load project details from DB
+        com.nebula.backend.dto.DeploymentQueuedMessage msg = new com.nebula.backend.dto.DeploymentQueuedMessage();
+        msg.setDeploymentId(d.getId());
         msg.setProjectId(p.getId());
-        msg.setRepo(p.getRepo());
-        msg.setBranch(p.getBranch());
-        msg.setBuildCommand(p.getBuildCommand());
-        msg.setRunCommand(p.getRunCommand());
-        msg.setEnv(p.getEnv());
 
         rabbitTemplate.convertAndSend(RabbitConfig.DEPLOY_EXCHANGE, RabbitConfig.DEPLOY_ROUTING, msg, message -> {
             message.getMessageProperties().setContentType("application/json");
             return message;
         });
 
-        return ResponseEntity.ok(Map.of("message","deploy queued","deploy",d));
+        return ResponseEntity.accepted().body(Map.of("message","deployment queued","deploymentId",d.getId()));
     }
 }

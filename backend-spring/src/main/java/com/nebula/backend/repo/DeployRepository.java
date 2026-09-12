@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface DeployRepository extends JpaRepository<Deploy, UUID> {
     List<Deploy> findByProjectId(UUID projectId);
+    boolean existsByProjectIdAndStatusIn(UUID projectId, List<String> statuses);
 }

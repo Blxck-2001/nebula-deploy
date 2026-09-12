@@ -11,11 +11,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
-	   git \
-	   openssh-client \
-	   docker.io \
-	   curl \
-	   ca-certificates \
+	git \
+	openssh-client \
+	docker.io \
+	curl \
+	ca-certificates \
+	tar \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& mkdir -p /usr/lib/docker/cli-plugins
 
@@ -24,6 +25,12 @@ RUN TAG=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | g
 	&& echo "Downloading buildx $TAG" \
 	&& curl -fsSL "https://github.com/docker/buildx/releases/download/${TAG}/buildx-${TAG}.linux-amd64" -o /usr/lib/docker/cli-plugins/docker-buildx \
 	&& chmod +x /usr/lib/docker/cli-plugins/docker-buildx || true
+
+# Install pack CLI (Buildpacks)
+RUN PACK_TAG=$(curl -s https://api.github.com/repos/buildpacks/pack/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') \
+    && echo "Downloading pack $PACK_TAG" \
+    && curl -fsSL "https://github.com/buildpacks/pack/releases/download/${PACK_TAG}/pack-${PACK_TAG}-linux.tgz" -o /tmp/pack.tgz || true \
+    && if [ -f /tmp/pack.tgz ]; then tar -xzf /tmp/pack.tgz -C /tmp && mv /tmp/pack /usr/local/bin/pack && chmod +x /usr/local/bin/pack; fi || true
 
 # Create application user to avoid running as root
 RUN groupadd -r nebula && useradd -r -g nebula -m -d /home/nebula -s /sbin/nologin nebula || true
