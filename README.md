@@ -1,59 +1,183 @@
 # Nebula Deploy
 
-Elevator pitch
----------------
-Nebula Deploy é uma plataforma leve para orquestrar deploys de aplicações Dockerizadas: uma API que recebe pedidos de deploy, publica mensagens em RabbitMQ, e um worker que clona repositórios, executa comandos de build/run, persiste logs e status em PostgreSQL e trata retries + DLQ. Projetado com foco em testabilidade, observabilidade e segurança (máscara de segredos).
+> [!WARNING]
+> **Work in progress — unstable project**
+>
+> Nebula Deploy is still under active development. Some features may be incomplete, contain bugs, or change significantly without notice.
+>
+> **Not recommended for production use.** This repository is intended for demonstration, learning, and technical evaluation.
+>
+> 
+> A full-stack deployment platform for managing projects, environments, deployments, logs, and configuration in one place.
 
-Por que este projeto importa
----------------------------
-- Demonstra decisões arquiteturais para sistemas distribuídos: separação entre API e worker, mensageria (RabbitMQ), persistência robusta (Postgres) e processamento assíncrono.
-- Mostra atenção prática à confiabilidade: retries com backoff, Dead Letter Queue, controle de timeouts e mascaramento de segredos em logs.
-- Projetado para ser testável: abstração de execução de comandos (`CommandRunner`) e testes que dispensam um daemon Docker local.
+![Nebula Deploy](https://img.shields.io/badge/status-in%20development-violet)
+![CI](https://img.shields.io/github/actions/workflow/status/Blxck-2001/nebula-deploy/ci.yml?label=CI)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-Meu papel e decisões chave
--------------------------
-- Liderança técnica e implementação end-to-end (API, worker, modelagem DB, scripts de demo).  
-- Priorizei testabilidade: extraí interação com o sistema (`CommandRunner`) para permitir testes unitários/integração sem Docker.  
-- Corrigi problemas práticos encontrados em execução (migração de esquema para `deploy_logs`, tratamento de ausência de `git`, ajustes no CI).  
+## Overview
 
-Arquitetura
------------------------
-- API (Spring Boot) — autenticação JWT, endpoints para criar projetos e publicar `DeployMessage` em RabbitMQ.  
-- Worker (Java) — consumidor RabbitMQ; clona repositórios, executa `buildCommand`/`runCommand`, stream de logs para Postgres, retries + DLQ.  
-- Mensageria — RabbitMQ com exchange `deploys-exchange` e fila `deploys` (mais `deploys-dlq`).  
-- Banco — PostgreSQL armazena `deploys` e `deploy_logs` (logs com `id` e `created_at`).  
-- Frontend — pequena interface de demonstração (opcional).  
+Nebula Deploy is a cloud-inspired deployment management platform designed to simplify the software delivery workflow.
 
-Tecnologias
------------
-- Java 21, Spring Boot 3.x
-- RabbitMQ
-- PostgreSQL
-- Docker / docker-compose
-- Maven, JUnit 5 (Testcontainers opt-in)
-- GitHub Actions (CI)
+It provides a centralized dashboard for teams to manage projects, track deployments, inspect logs, configure environments, and monitor deployment activity.
 
-Destaques técnicos
-------------------
-- `CommandRunner` abstrai execução de processos para facilitar mocks em testes E2E.  
-- Logs persistidos por linha em `deploy_logs` com `created_at` para ordenação e investigação.  
-- Máscara de segredos em logs (`GIT_TOKEN`, `GIT_SSH_PRIVATE_KEY`) para evitar vazamento de credenciais.  
-- Migração aplicada para adicionar `id` e `created_at` em `deploy_logs` (arquivo `scripts/db/0001_add_deploy_logs.sql`).
+## Highlights
 
-Como avaliar rapidamente
------------------------ 
-1. Use o endpoint `POST /projects/{id}/deploy` para criar um deploy e acompanhe `deploys` + `deploy_logs` no Postgres.  
-2. Veja `WorkerService` para o fluxo de consumo e `CommandRunner` para a estratégia de testabilidade.
+- Modern deployment dashboard
+- Project and environment management
+- Deployment history and status tracking
+- Real-time-oriented worker architecture
+- Application logs and deployment activity
+- Environment variables and configuration management
+- Docker-based local development
+- Automated CI workflows
+- Responsive interface with light and dark themes
 
-Documentação e manutenção
--------------------------
-- `docs/GETTING_STARTED.md` — guias para rodar localmente e como reproduzir o demo (destinado a engenheiros).  
-- `scripts/db/0001_add_deploy_logs.sql` — migração usada em ambiente de demo/prod.  
+## Architecture
 
-Licença e contribuição
-----------------------
-Este repositório está licenciado sob MIT — veja `LICENSE`. Para contribuidores, veja `CONTRIBUTING.md`.
+The project is organized as a multi-service application:
 
-Contato
--------
-Se quiser conversar sobre decisões técnicas ou uma avaliação do código, me marque no PR ou acesse meu perfil.
+```text
+nebula-deploy/
+├── frontend/          # Next.js application and user interface
+├── backend-spring/    # Main Spring Boot API
+├── backend-worker/    # Background deployment worker
+├── db/                # Database migrations
+├── scripts/           # Development and demo scripts
+├── docs/              # Project documentation
+└── .github/workflows/ # CI/CD automation
+```
+
+### Technology stack
+
+- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
+- **Backend:** Java, Spring Boot, Maven
+- **Worker:** Spring Boot background service
+- **Database:** SQL migrations
+- **Infrastructure:** Docker and Docker Compose
+- **Automation:** GitHub Actions
+- **Quality:** ESLint, Playwright, automated tests
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+
+- Java 17+
+- Docker Desktop
+- Git
+
+### Clone the repository
+
+```bash
+git clone https://github.com/Blxck-2001/nebula-deploy.git
+cd nebula-deploy
+```
+
+### Configure environment variables
+
+Copy the example environment files and configure the required values:
+
+```bash
+copy .env.example .env
+copy frontend\.env.example frontend\.env.local
+```
+
+> Never commit credentials, tokens, or production environment variables.
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+### Run the frontend locally
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at:
+
+```text
+http://localhost:3000
+```
+
+### Run the backend locally
+
+```bash
+cd backend-spring
+.\mvnw.cmd spring-boot:run
+```
+
+## Testing
+
+Run frontend linting and tests:
+
+```bash
+cd frontend
+npm run lint
+npm run test
+```
+
+Run end-to-end tests:
+
+```bash
+npx playwright test
+```
+
+Run backend tests:
+
+```bash
+cd backend-spring
+.\mvnw.cmd test
+```
+
+## Project documentation
+
+- [Getting Started](docs/GETTING_STARTED.md)
+- [Architecture](ARCHITECTURE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Demo guide](demo-steps.md)
+- [Cleanup guide](CLEANUP.md)
+
+## Engineering focus
+
+This project demonstrates practical experience with:
+
+- Full-stack application architecture
+- REST API development
+- Asynchronous background processing
+- Containerized development environments
+- CI automation
+- Type-safe frontend development
+- End-to-end testing
+- Modular and maintainable code organization
+
+## Roadmap
+
+- [ ] Deployment provider integrations
+- [ ] Real-time deployment status updates
+- [ ] Advanced logs filtering
+- [ ] Team collaboration and permissions
+- [ ] Notifications and webhooks
+- [ ] Production observability
+
+## Contributing
+
+Contributions, suggestions, and improvements are welcome.
+
+1. Create a feature branch.
+2. Make your changes.
+3. Add or update tests.
+4. Run the quality checks.
+5. Open a pull request.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+Built with TypeScript, React, Spring Boot, and Docker.
