@@ -15,7 +15,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Overview
-
+![Preview](https://prnt.sc/61U8IUaXhTyb)
 Nebula Deploy is a cloud-inspired deployment management platform designed to simplify the software delivery workflow.
 
 It provides a centralized dashboard for teams to manage projects, track deployments, inspect logs, configure environments, and monitor deployment activity.
